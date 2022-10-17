@@ -1,4 +1,3 @@
-
 def Lobatto(xi, Order):
     import numpy as np
     Lo = np.zeros((np.size(xi), 9))
@@ -33,15 +32,14 @@ def LobattoDerivative(xi, Order):
     return dLo[:, 0:Order+1]
 
 
-def Mesh1D(DuctLength, NrOfElem):
+def Mesh1D(DuctLength, NrOfElem, R0=0.):
     import numpy as np
     NrOfNodes = NrOfElem+1
-    Coord = np.linspace(0, DuctLength, NrOfNodes)
+    Coord = np.linspace(R0, R0+DuctLength, NrOfNodes)
     Element = np.zeros((2, NrOfElem))
     Element[0, :] = np.arange(0, NrOfElem)
     Element[1, :] = np.arange(1, NrOfElem+1)
     return NrOfNodes, Coord, Element
-
 
 def CreateDofs(NrOfNodes, NrOfElem, Element, Order):
     import numpy as np
@@ -80,6 +78,35 @@ def MassAndStiffness_1D(iElem, Order, Coord, Element):
       Me += GaussWeights[n]*np.outer(L, L)*Le/2
   return Ke, Me
 
+def MassAndStiffness_spherical_1D(iElem, Order, Coord, Element):
+  import numpy as np
+
+  Ke = np.zeros((Order+1, Order+1), dtype=np.complex128)
+  Ce = np.zeros((Order+1, Order+1), dtype=np.complex128)
+  Me = np.zeros((Order+1, Order+1), dtype=np.complex128)
+  Me_r2 = np.zeros((Order+1, Order+1), dtype=np.complex128)
+  
+  r1 = Coord[Element[0, iElem-1].astype(int)]
+  r2 = Coord[Element[1, iElem-1].astype(int)]
+  Le = (r2-r1)
+  # quadrature rule (integration order 2*Order
+  GaussPoints, GaussWeights = np.polynomial.legendre.leggauss(int(2*Order))
+  NrOfGaussPoints = GaussWeights.size
+  # Loop over the Gauss points
+  for n in np.arange(0, NrOfGaussPoints):
+      xi = GaussPoints[n]
+      # High-order Lobatto shape functions
+      L = Lobatto(xi, Order)
+      dLdxi = LobattoDerivative(xi, Order)
+      dLdx = 2/Le*dLdxi
+      r = r1 + (Le/2)*(1+xi) # mapping from [-1, 1] to the physical radial coordinate [r1, r2]
+      # Elementary matrices
+      Ke += GaussWeights[n]*np.outer(dLdx, dLdx)*Le/2
+      Ce += GaussWeights[n]*(1/r)*np.outer(L, dLdx)*Le/2
+      Me += GaussWeights[n]*np.outer(L, L)*Le/2
+      Me_r2 += GaussWeights[n]*(1/r**2)*np.outer(L, L)*Le/2
+
+  return Ke, Ce, Me, Me_r2
 
 def GetSolutionOnSubgrid(Sol, Order, Coord, Element, NrOfElem, DofElement, NrOfWavesOnDomain):
   # create a finer subgrid to interpolate the numerical solution
